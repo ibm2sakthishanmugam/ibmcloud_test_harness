@@ -37,6 +37,7 @@ resource "ibm_is_security_group" "f5_management_sg" {
 }
 
 resource "ibm_is_security_group_rule" "f5_management_in_icmp" {
+  depends_on = [ibm_is_security_group.f5_management_sg]
   group     = ibm_is_security_group.f5_management_sg.id
   direction = "inbound"
   icmp {
@@ -45,6 +46,7 @@ resource "ibm_is_security_group_rule" "f5_management_in_icmp" {
 }
 
 resource "ibm_is_security_group_rule" "f5_management_in_ssh" {
+  depends_on = [ibm_is_security_group_rule.f5_management_in_icmp]
   group     = ibm_is_security_group.f5_management_sg.id
   direction = "inbound"
   tcp {
@@ -53,6 +55,7 @@ resource "ibm_is_security_group_rule" "f5_management_in_ssh" {
   }
 }
 resource "ibm_is_security_group_rule" "f5_management_in_https" {
+  depends_on = [ibm_is_security_group_rule.f5_management_in_ssh]
   group     = ibm_is_security_group.f5_management_sg.id
   direction = "inbound"
   tcp {
@@ -61,6 +64,7 @@ resource "ibm_is_security_group_rule" "f5_management_in_https" {
   }
 }
 resource "ibm_is_security_group_rule" "f5_management_in_snmp_tcp" {
+  depends_on = [ibm_is_security_group_rule.f5_management_in_https]
   group     = ibm_is_security_group.f5_management_sg.id
   direction = "inbound"
   tcp {
@@ -69,6 +73,7 @@ resource "ibm_is_security_group_rule" "f5_management_in_snmp_tcp" {
   }
 }
 resource "ibm_is_security_group_rule" "f5_management_in_snmp_udp" {
+  depends_on = [ibm_is_security_group_rule.f5_management_in_snmp_tcp]
   group     = ibm_is_security_group.f5_management_sg.id
   direction = "inbound"
   udp {
@@ -77,6 +82,7 @@ resource "ibm_is_security_group_rule" "f5_management_in_snmp_udp" {
   }
 }
 resource "ibm_is_security_group_rule" "f5_management_in_ha" {
+  depends_on = [ibm_is_security_group_rule.f5_management_in_snmp_udp]
   group     = ibm_is_security_group.f5_management_sg.id
   direction = "inbound"
   udp {
@@ -86,6 +92,7 @@ resource "ibm_is_security_group_rule" "f5_management_in_ha" {
 }
 
 resource "ibm_is_security_group_rule" "f5_management_in_iquery" {
+  depends_on = [ibm_is_security_group_rule.f5_management_in_ha]
   group     = ibm_is_security_group.f5_management_sg.id
   direction = "inbound"
   tcp {
@@ -97,6 +104,7 @@ resource "ibm_is_security_group_rule" "f5_management_in_iquery" {
 // allow all outbound on control plane
 // all TCP
 resource "ibm_is_security_group_rule" "f5_management_out_tcp" {
+  depends_on = [ibm_is_security_group_rule.f5_management_in_iquery]
   group     = ibm_is_security_group.f5_management_sg.id
   direction = "outbound"
   tcp {
@@ -107,6 +115,7 @@ resource "ibm_is_security_group_rule" "f5_management_out_tcp" {
 
 // all outbound UDP
 resource "ibm_is_security_group_rule" "f5_management_out_udp" {
+  depends_on = [ibm_is_security_group_rule.f5_management_out_tcp]
   group     = ibm_is_security_group.f5_management_sg.id
   direction = "outbound"
   udp {
@@ -117,6 +126,7 @@ resource "ibm_is_security_group_rule" "f5_management_out_udp" {
 
 // all ICMP
 resource "ibm_is_security_group_rule" "f5_management_out_icmp" {
+  depends_on = [ibm_is_security_group_rule.f5_management_out_udp]
   group     = ibm_is_security_group.f5_management_sg.id
   direction = "outbound"
   icmp {
@@ -124,15 +134,29 @@ resource "ibm_is_security_group_rule" "f5_management_out_icmp" {
   }
 }
 
+// temp workaround
+resource "ibm_is_security_group_rule" "f5_management_in_https_8" {
+  depends_on = [ibm_is_security_group_rule.f5_management_out_icmp]
+  group     = ibm_is_security_group.f5_management_sg.id
+  direction = "inbound"
+  tcp {
+    port_min = 8443
+    port_max = 8443
+  }
+}
+
+
 // allow all traffic to data plane interfaces
 // TMM is the firewall
 resource "ibm_is_security_group" "f5_tmm_sg" {
+  depends_on = [ibm_is_security_group_rule.f5_management_in_https_8]
   name = "sd-${random_uuid.namer.result}"
   vpc  = data.ibm_is_subnet.f5_management.vpc
 }
 
 // all TCP
 resource "ibm_is_security_group_rule" "f5_tmm_in_tcp" {
+  depends_on = [ibm_is_security_group.f5_tmm_sg]
   group     = ibm_is_security_group.f5_tmm_sg.id
   direction = "inbound"
   tcp {
@@ -142,6 +166,7 @@ resource "ibm_is_security_group_rule" "f5_tmm_in_tcp" {
 }
 
 resource "ibm_is_security_group_rule" "f5_tmm_out_tcp" {
+  depends_on = [ibm_is_security_group_rule.f5_tmm_in_tcp]
   group     = ibm_is_security_group.f5_tmm_sg.id
   direction = "outbound"
   tcp {
@@ -152,6 +177,7 @@ resource "ibm_is_security_group_rule" "f5_tmm_out_tcp" {
 
 // all UDP
 resource "ibm_is_security_group_rule" "f5_tmm_in_udp" {
+  depends_on = [ibm_is_security_group_rule.f5_tmm_out_tcp]
   group     = ibm_is_security_group.f5_tmm_sg.id
   direction = "inbound"
   udp {
@@ -161,6 +187,7 @@ resource "ibm_is_security_group_rule" "f5_tmm_in_udp" {
 }
 
 resource "ibm_is_security_group_rule" "f5_tmm_out_udp" {
+  depends_on = [ibm_is_security_group_rule.f5_tmm_in_udp]
   group     = ibm_is_security_group.f5_tmm_sg.id
   direction = "outbound"
   udp {
@@ -171,6 +198,7 @@ resource "ibm_is_security_group_rule" "f5_tmm_out_udp" {
 
 // all ICMP
 resource "ibm_is_security_group_rule" "f5_tmm_in_icmp" {
+  depends_on = [ibm_is_security_group_rule.f5_tmm_out_udp]
   group     = ibm_is_security_group.f5_tmm_sg.id
   direction = "inbound"
   icmp {
@@ -179,6 +207,7 @@ resource "ibm_is_security_group_rule" "f5_tmm_in_icmp" {
 }
 
 resource "ibm_is_security_group_rule" "f5_tmm_out_icmp" {
+  depends_on = [ibm_is_security_group_rule.f5_tmm_in_icmp]
   group     = ibm_is_security_group.f5_tmm_sg.id
   direction = "outbound"
   icmp {
@@ -187,6 +216,7 @@ resource "ibm_is_security_group_rule" "f5_tmm_out_icmp" {
 }
 
 resource "ibm_is_instance" "f5_ve_instance" {
+  depends_on = [ibm_is_security_group_rule.f5_tmm_out_icmp]
   name    = var.instance_name
   image   = data.ibm_is_image.tmos_image.id
   profile = data.ibm_is_instance_profile.instance_profile.id
@@ -204,7 +234,6 @@ resource "ibm_is_instance" "f5_ve_instance" {
   zone = data.ibm_is_subnet.f5_management.zone
   keys = [data.ibm_is_ssh_key.f5_ssh_pub_key.id]
   user_data = data.template_file.user_data.rendered
-  depends_on = [ibm_is_security_group.f5_management_sg, ibm_is_security_group.f5_tmm_sg]
 }
 
 # create floating IPs

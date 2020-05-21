@@ -25,6 +25,8 @@ import time
 import requests
 import threading
 import shutil
+import socket
+import time
 import python_terraform as pt
 
 LOG = logging.getLogger('ibmcloud_test_harness_run')
@@ -56,42 +58,135 @@ def check_pid(pid):
 
 
 def start_report(test_id, start_data):
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    requests.post("%s/start/%s" % (CONFIG['report_service_base_url'], test_id),
-                  headers=headers, data=json.dumps(start_data))
+    file = open("results/"+test_id+".txt",'a')
+    file.write(json.dumps(start_data))
+    file.close()
 
 
 def update_report(test_id, update_data):
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    requests.put("%s/report/%s" % (CONFIG['report_service_base_url'], test_id),
-                  headers=headers, data=json.dumps(update_data))
+    #headers = {
+    #    'Content-Type': 'application/json'
+    #}
+    #requests.put("%s/report/%s" % (CONFIG['report_service_base_url'], test_id),
+    #              headers=headers, data=json.dumps(update_data))
+    file = open("results/"+test_id+".txt",'a')
+    print("---------------------------------")
+    print(update_data)
+    #resp_dict = json.loads(update_data)
+    print("*********************************")
+    print(update_data['terraform_output']['f5_admin_portal']['value'])
+    address = update_data['terraform_output']['f5_admin_portal']['value']
+    print(address[8:])
+    temp = address[8:]
+    ip = temp.split(":")
+    print(ip)
+ 
+    # flag to check if the VSI is reachable 
+    flag = 0
+    i = 0 
+    while i < 100:
+        i = i + 1
+        if "8443" in address:
+            print("1 NIC **************************")
+            a_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            print("8443 port testing...")
+            location = (ip[0], 8443)
+            result_of_check = a_socket.connect_ex(location)
+            if result_of_check == 0:
+                flag = 1
+                print("Port is open")
+                a_socket.close()
+                print("breaking from loop: NIC1")
+                break
+            else:
+                flag = 0
+                print("Port is not open")
+            a_socket.close()
+        else:
+            print("2 NIC **************************")
+            b_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            print("443 port testing...")
+            loc = (ip[0], 443)
+            print("timer starts for 10 seconds")
+            time.sleep(5)
+            print("timer over..")
+            result_of_check1 = b_socket.connect_ex(loc)
+            if result_of_check1 == 0:
+                flag = 1
+                print("Port is open")
+                b_socket.close()
+                print("breaking from loop: 2-NIC")
+                break
+            else:
+                flag = 0
+                print("Port is not open")
+            b_socket.close()
+
+    # exit if VSI not reachable; to keep the system as it is for debugging
+    if flag == 0:
+        print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+        print("VSI not reachable.. breaking the script")
+        print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+        print(update_data)
+        print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+        sys.exit()
+
+    #a_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #print(address[8:])
+    #temp = address[8:]
+    #ip = temp.split(":")
+    #print(ip)
+    #print("8443 port testing...")
+    #location = (ip[0], 8443)
+    #time.sleep(1)
+    #result_of_check = a_socket.connect_ex(location)
+    #if result_of_check == 0:
+    #    print("Port is open")
+    #else:
+    #    print("Port is not open")
+    #a_socket.close()
+    #b_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #print("443 port testing...")
+    #loc = (ip[0], 443)
+    #time.sleep(1)
+    #result_of_check1 = b_socket.connect_ex(loc)
+    #if result_of_check1 == 0:
+    #    print("Port is open")
+    #else:
+    #    print("Port is not open")
+    #b_socket.close()
+    print("TEST DONE....")
+    print("---------------------------------")
+    file.write(json.dumps(update_data))
+    file.close()
 
 
 def stop_report(test_id, results):
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    requests.post("%s/stop/%s" % (CONFIG['report_service_base_url'], test_id),
-                  headers=headers, data=json.dumps(results))
+    #headers = {
+    #    'Content-Type': 'application/json'
+    #}
+    #requests.post("%s/stop/%s" % (CONFIG['report_service_base_url'], test_id),
+    #              headers=headers, data=json.dumps(results))
+    file = open("results/"+test_id+".txt",'a')
+    file.write(json.dumps(results))
+    file.close()
 
 
 def poll_report(test_id):
     end_time = time.time() + int(CONFIG['test_timeout'])
     while (end_time - time.time()) > 0:
-        base_url = CONFIG['report_service_base_url']
-        headers = {
-            'Content-Type': 'application/json'
-        }
-        response = requests.get("%s/report/%s" % (base_url, test_id), headers=headers)
-        if response.status_code < 400:
-            data = response.json()
-            if data['duration'] > 0:
-                LOG.info('test run %s completed', test_id)
-                return data
+        #base_url = CONFIG['report_service_base_url']
+        #headers = {
+        #    'Content-Type': 'application/json'
+        #}
+        #response = requests.get("%s/report/%s" % (base_url, test_id), headers=headers)
+        file = open("results/"+test_id+".txt","r")
+        #if response.status_code < 400:
+        json_str=file.read().replace('\n', '')
+        data = json_str
+        if data['duration'] > 0:
+            LOG.info('test run %s completed', test_id)
+            return data
         seconds_left = int(end_time - time.time())
         LOG.debug('test_id: %s with %s seconds left', test_id, str(seconds_left))
         time.sleep(CONFIG['report_request_frequency'])
@@ -104,7 +199,8 @@ def run_test(test_dir, zone, image, ttype):
     start_data = {
         'zone': zone,
         'image_name': image,
-        'type': ttype
+        'type': ttype,
+        'duration':0
     }
     start_report(test_id, start_data)
     tf = pt.Terraform(working_dir=test_dir, var_file='test_vars.tfvars')
@@ -124,13 +220,14 @@ def run_test(test_dir, zone, image, ttype):
         'terraform_apply_result_code': rc,
         'terraform_output': out,
         'terraform_apply_completed_at': now.timestamp(),
-        'terraform_apply_completed_at_readable': now.strftime('%Y-%m-%d %H:%M:%S UTC')
+        'terraform_apply_completed_at_readable': now.strftime('%Y-%m-%d %H:%M:%S UTC'),
+        'duration':1
     }
     update_report(test_id, update_data)
-    results = poll_report(test_id)
-    if not results:
-        results = {"test timedout": "(%d seconds)" % int(CONFIG['test_timeout'])}
-        stop_report(test_id, results)
+    #results = poll_report(test_id)
+    #if not results:
+    #    results = {"test timedout": "(%d seconds)" % int(CONFIG['test_timeout'])}
+    #    stop_report(test_id, results)
     LOG.info('destroying cloud resources for test %s', test_id)
     (rc, out, err) = tf.destroy()
     if rc > 0:
@@ -160,9 +257,12 @@ def runner():
         running_threads = list()
         zones = os.listdir(QUEUE_DIR)
         runners = {}
+        LOG.info('zones: %s',zones)
         for zone in zones:
             if zone not in runners:
                 runners[zone] = list()
+                LOG.info('runners: %d',len(runners[zone]))
+                LOG.info('runners_per_zone: %d',CONFIG['runners_per_zone'])
                 if len(runners[zone]) < CONFIG['runners_per_zone']:
                     (image, ttype, test_dir) = initialize_test_dir(os.path.join(QUEUE_DIR, zone))
                     if test_dir:
